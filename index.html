@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ピン旅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Chivo+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 時刻表の索引地図。左に乗換案内パネル、右に全面の路線図。スマホは地図が上、パネルが下 */
+:root{
+  --sea:#dce6ec; --land:#fbfbf9; --edge:#aebbc4;
+  --ink:#1b262e; --muted:#5d6a73; --panel:#ffffff; --hair:#dbe1e5; --soft:#eef2f4;
+  --pin:#e0342a; --pin-ink:#ffffff; --trail:#1b262e; --ballast:#d9dcd5; --rail:#3a4650;
+  --lf:none;
+  --f-display:"Dela Gothic One","Hiragino Sans","Yu Gothic",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;
+  --f-num:"Chivo Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --sea:#0e1820; --land:#1a2731; --edge:#34464f;
+  --ink:#e4ebef; --muted:#94a4ae; --panel:#121d25; --hair:#283741; --soft:#1a2731;
+  --pin:#ff5848; --pin-ink:#ffffff; --trail:#ffffff; --ballast:#2c3a43; --rail:#c9d3d9;
+  --lf:brightness(1.35) saturate(.9); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --sea:#0e1820; --land:#1a2731; --edge:#34464f;
+  --ink:#e4ebef; --muted:#94a4ae; --panel:#121d25; --hair:#283741; --soft:#1a2731;
+  --pin:#ff5848; --pin-ink:#ffffff; --trail:#ffffff; --ballast:#2c3a43; --rail:#c9d3d9;
+  --lf:brightness(1.35) saturate(.9); color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--panel);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.55;overflow:hidden}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pin);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(320px,380px) 1fr;height:100%}
+.panel{overflow-y:auto;border-right:1px solid var(--hair);padding-block:20px 28px;padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:18px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{font-family:var(--f-display);font-weight:400;font-size:30px;letter-spacing:.04em;margin:0;line-height:1}
+.brand h1 i{font-style:normal;color:var(--pin)}
+.brand p{margin:0;color:var(--muted);font-size:12.5px}
+
+.search{display:grid;grid-template-columns:1fr 36px;gap:8px;align-items:center}
+.field{display:flex;align-items:center;gap:10px;border:1px solid var(--hair);border-radius:8px;padding:6px 10px;background:var(--panel)}
+.field label{font-size:11px;letter-spacing:.12em;color:var(--muted);width:2.6em;flex:none}
+.field input{border:0;background:transparent;outline:none;width:100%;min-width:0;font-size:16px;font-weight:500;padding:4px 0}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;border:2px solid var(--ink)}
+.dot.to{background:var(--ink)}
+.stack{display:grid;gap:6px}
+.swap{grid-row:span 1;width:36px;height:36px;border-radius:8px;border:1px solid var(--hair);background:var(--soft);cursor:pointer;display:grid;place-items:center}
+.swap:hover{border-color:var(--muted)}
+.dot.via{border-color:var(--pin);border-radius:2px;transform:rotate(45deg);width:9px;height:9px}
+.field .rm{flex:none;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;border-radius:4px}
+.field .rm:hover{color:var(--ink);background:var(--soft)}
+.addvia{justify-self:start;border:1px dashed var(--hair);background:transparent;border-radius:8px;padding:5px 12px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.addvia:hover{color:var(--ink);border-color:var(--muted)}
+.vtag{display:inline-block;font-size:10px;font-weight:700;color:var(--pin);border:1px solid var(--pin);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:1px}
+.cta{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:8px;background:var(--pin);color:var(--pin-ink);font-weight:700;padding:11px 14px;cursor:pointer;letter-spacing:.06em;font-size:14px}
+.cta svg{width:13px;height:13px}
+.cta:hover{filter:brightness(1.06)}
+.tip{position:absolute;left:8px;bottom:calc(100% + 10px);background:var(--ink);color:var(--panel);font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:8px;white-space:nowrap;box-shadow:0 4px 14px rgba(10,20,30,.2)}
+.tip::after{content:"";position:absolute;left:20px;top:100%;border:7px solid transparent;border-top-color:var(--ink)}
+.btn.play.hint{animation:pulse 1.5s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pin) 60%,transparent)}100%{box-shadow:0 0 0 16px color-mix(in srgb,var(--pin) 0%,transparent)}}
+@media (prefers-reduced-motion:reduce){.btn.play.hint{animation:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--pin) 35%,transparent)}}
+.row2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row2 .field{flex:1}
+.field input[type=time]{font-family:var(--f-num);font-size:15px}
+.go{flex:none;border:0;background:var(--ink);color:var(--panel);border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer;letter-spacing:.06em}
+.err{color:var(--pin);font-size:12.5px;margin:0}
+
+.sortbar{display:flex;gap:4px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.sortbar h2{margin:0;font-size:12px;letter-spacing:.12em;color:var(--muted);font-weight:500}
+.seg{display:inline-flex;border:1px solid var(--hair);border-radius:999px;padding:2px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+
+.routes{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.route{border:1px solid var(--hair);border-radius:10px;background:var(--panel);cursor:pointer;overflow:hidden}
+.route:hover{border-color:var(--muted)}
+.route.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.rhead{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:baseline;padding:12px 14px 10px;width:100%;text-align:left;border:0;background:transparent;cursor:pointer}
+.rnum{font-family:var(--f-num);font-size:11px;color:var(--muted)}
+.rtime{font-family:var(--f-num);font-size:19px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.rtime small{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+.rdur{font-weight:700;font-size:14px;text-align:right}
+.rmeta{grid-column:2 / 4;display:flex;gap:10px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.tags{grid-column:1 / 4;display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.badge{font-size:10.5px;border-radius:4px;padding:1px 6px;background:var(--soft);color:var(--muted)}
+.badge.fast{background:var(--ink);color:var(--panel)}
+.chips{grid-column:1 / 4;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500}
+.chip i{width:14px;height:5px;border-radius:3px;display:inline-block}
+.chip + .chip::before{content:"›";color:var(--muted);margin-right:2px}
+
+.detail{border-top:1px dashed var(--hair);padding:10px 14px 14px;display:grid;gap:0}
+.lblock{border-radius:8px;margin-inline:-8px;padding-inline:8px;transition:background-color .25s,opacity .25s}
+.lblock.now{background:color-mix(in srgb,var(--lc) 14%,var(--panel));box-shadow:inset 3px 0 0 var(--lc)}
+.lblock.now .n{color:var(--ink)}
+.detail.running .lblock.done,.detail.running .xf.done{opacity:.45}
+.bar{position:relative}
+.pdot{position:absolute;left:50%;top:var(--p,0%);width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:var(--pin);border:2px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.25);display:none}
+.lblock.now .pdot{display:block}
+.lblock.now .bar{box-shadow:0 0 0 2px color-mix(in srgb,var(--lc) 30%,transparent)}
+.where{display:none;margin-top:3px;font-weight:700;color:var(--ink);font-size:12px}
+.lblock.now .where{display:block}
+.lblock.now .where::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pin);margin-right:6px;vertical-align:1px}
+.nowtag{display:none;margin-left:8px;font-weight:700;color:var(--pin)}
+.xf.now .nowtag{display:inline}
+.xf.now .xbar{border-left-color:var(--pin)}
+.tl{display:grid;grid-template-columns:52px 18px 1fr;align-items:center;column-gap:8px;font-size:13px}
+.tl .t{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right;font-size:12.5px}
+.tl .n{font-weight:700}
+.tl .k{color:var(--muted);font-size:11px;margin-left:6px;font-weight:400}
+.node{width:11px;height:11px;border-radius:50%;border:2.5px solid var(--ink);background:var(--panel);justify-self:center}
+.bar{width:5px;justify-self:center;height:100%;min-height:34px;border-radius:3px}
+.tl.leg .info{font-size:12px;color:var(--muted);padding-block:6px}
+.tl.leg .info b{color:var(--ink);font-weight:500}
+.tl.xf .info{font-size:11.5px;color:var(--muted);padding-block:4px}
+.xbar{width:0;border-left:2px dotted var(--muted);height:22px;justify-self:center}
+
+details.legend{border-top:1px solid var(--hair);padding-top:12px}
+details.legend summary{cursor:pointer;font-size:12px;letter-spacing:.12em;color:var(--muted)}
+.lg{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:4px 12px;margin-top:10px;font-size:12px}
+.lg span{display:flex;align-items:center;gap:6px}
+.lg i{width:18px;border-radius:3px;flex:none}
+.note{font-size:11.5px;color:var(--muted);margin:0}
+
+/* map */
+.mapwrap{position:relative;min-width:0;background:var(--sea);overflow:hidden;touch-action:none}
+#map{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none}
+#map.drag{cursor:grabbing}
+.land{fill:var(--land);stroke:var(--edge);stroke-width:1;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.lines{filter:var(--lf)}
+.lines path{fill:none;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.lines.dim path{opacity:.22}
+#map[data-lod="0"] .lines .k-t,#map[data-lod="0"] .lines .k-m{display:none}
+#map[data-lod="0"] .lines .k-p{opacity:.55}
+#map[data-lod="0"] .lines.dim .k-p{opacity:.12}
+#seaRect,#land{transition:opacity .2s}
+.loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:12px 18px;font-weight:500;box-shadow:0 6px 24px rgba(10,20,30,.12)}
+.hl path{fill:none;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.hl .casing{stroke:var(--land)}
+.hl .col{filter:var(--lf)}
+.hl .bed,.hl .ties,.hl .railp{vector-effect:none}
+.hl .bed{stroke:var(--ballast)}
+.hl .ties{stroke-linecap:butt;stroke-linejoin:miter;filter:var(--lf)}
+.hl .railp{stroke:var(--rail)}
+.trail{fill:none;stroke:var(--trail);stroke-width:2;stroke-dasharray:1 5;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.st circle.m{fill:var(--land);stroke:var(--ink);stroke-width:1.3}
+.st.x circle.m{stroke-width:2}
+.st circle.hit{fill:transparent;cursor:pointer}
+.st text{font-size:11px;fill:var(--ink);paint-order:stroke;stroke:var(--land);stroke-width:3.2px;stroke-linejoin:round;font-weight:500;pointer-events:none}
+.st.major text{font-size:12.5px;font-weight:700}
+.st.end circle.m{fill:var(--ink);stroke:var(--land)}
+.st.end text{font-size:13.5px;font-weight:700}
+.st.via circle.m{fill:var(--land);stroke:var(--pin);stroke-width:2.6}
+.st.via text{font-weight:700;font-size:12.5px}
+.st.off text{display:none}
+.st.faded{opacity:.62}
+
+.hud{position:absolute;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:10px 14px;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;box-shadow:0 6px 24px rgba(10,20,30,.12);max-width:760px;margin:0 auto}
+.ctl{display:flex;gap:6px}
+.btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--hair);background:var(--panel);cursor:pointer;display:grid;place-items:center}
+.btn.play{background:var(--pin);border-color:var(--pin);color:var(--pin-ink)}
+.btn svg{width:16px;height:16px}
+.status{min-width:0;display:grid;gap:2px}
+.status .clock{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:13px;display:flex;gap:12px;flex-wrap:wrap;align-items:baseline}
+.status .clock b{font-size:18px;font-weight:600}
+.status .now{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{grid-column:1 / 3;height:4px;background:var(--soft);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--pin)}
+.speed{grid-column:1 / 3;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px}
+.speed label{color:var(--muted);letter-spacing:.08em}
+.speed input[type=range]{flex:1;min-width:120px;accent-color:var(--pin)}
+.speed output{font-family:var(--f-num);font-variant-numeric:tabular-nums;min-width:11em}
+.follow{display:flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer}
+.follow input{accent-color:var(--pin)}
+
+.zoom{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));display:grid;gap:6px}
+.zoom button{width:36px;height:36px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);cursor:pointer;font-size:18px;line-height:1}
+.zoom button.fit{font-size:11px}
+.pop{position:absolute;background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:10px;box-shadow:0 6px 24px rgba(10,20,30,.18);display:grid;gap:6px;min-width:150px;transform:translate(-50%,calc(-100% - 14px));z-index:5}
+.pop b{font-size:15px}
+.pop .ls{font-size:11px;color:var(--muted)}
+.pop div{display:flex;gap:6px}
+.pop button{flex:1;border:1px solid var(--hair);border-radius:6px;background:var(--soft);padding:5px 8px;cursor:pointer;font-size:12px;white-space:nowrap}
+.pop button:disabled{opacity:.4;cursor:default}
+.pop button.t{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.arrived{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:7px 16px;border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.06em}
+
+@media (max-width:760px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;grid-template-rows:62vh auto;height:auto;min-height:100%}
+  .mapwrap{order:-1;height:62vh}
+  .panel{border-right:0;overflow:visible;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .hud{left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));bottom:8px;padding:8px 10px;gap:6px 10px}
+  .btn{width:36px;height:36px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div class="brand">
+      <h1>ピン<i>旅</i></h1>
+      <p>全国の鉄道約580路線・9,000駅。選んだ経路を、ピンが線路の上を走って進みます</p>
+    </div>
+
+    <form id="q" class="stack" autocomplete="off">
+      <div class="search">
+        <div class="stack">
+          <div class="field"><span class="dot"></span><label for="from">出発</label><input id="from" list="stlist" value="東京" placeholder="駅名を入力"></div>
+          <div id="vias" class="stack"></div>
+          <div class="field"><span class="dot to"></span><label for="to">到着</label><input id="to" list="stlist" value="博多" placeholder="駅名を入力"></div>
+        </div>
+        <button type="button" class="swap" id="swap" aria-label="出発と到着を入れ替える" title="入れ替え">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v12M2 5l3-3 3 3M11 14V2M8 11l3 3 3-3"/></svg>
+        </button>
+      </div>
+      <button type="button" class="addvia" id="addVia">＋ 経由駅を追加</button>
+      <div class="row2">
+        <div class="field"><label for="dep">発時刻</label><input id="dep" type="time" value="09:00"></div>
+        <button class="go" type="submit">検索</button>
+      </div>
+      <p class="err" id="err" hidden></p>
+      <datalist id="stlist"></datalist>
+    </form>
+
+    <section class="stack" style="gap:10px">
+      <div class="sortbar">
+        <h2 id="rcount">ルート候補</h2>
+        <div class="seg" role="group" aria-label="並び替え">
+          <button type="button" id="sortTime" aria-pressed="true">早い順</button>
+          <button type="button" id="sortXfer" aria-pressed="false">乗換が少ない順</button>
+        </div>
+      </div>
+      <ol class="routes" id="routes"></ol>
+      <p class="note">所要時間は線路の長さと路線の種類（新幹線・JR在来線・私鉄など）から計算した目安で、実際の時刻表とは異なります。</p>
+      <p class="note">出典：国土数値情報（鉄道データ 2025年度版）（国土交通省）を加工して作成</p>
+    </section>
+
+    <details class="legend">
+      <summary>路線の種類</summary>
+      <div class="lg" id="legend"></div>
+    </details>
+  </aside>
+
+  <main class="mapwrap" id="wrap">
+    <svg id="map" role="img" aria-label="日本の鉄道路線図">
+      <rect id="paper" x="-5000" y="-5000" width="12000" height="12000" fill="var(--land)"></rect>
+      <rect id="seaRect" x="-5000" y="-5000" width="12000" height="12000" fill="var(--sea)"></rect>
+      <g id="land"></g>
+      <g id="lines" class="lines"></g>
+      <g id="hl" class="hl"></g>
+      <path id="trail" class="trail"></path>
+      <g id="stations"></g>
+      <g id="pin"></g>
+    </svg>
+    <div class="zoom">
+      <button type="button" id="zin" aria-label="拡大">+</button>
+      <button type="button" id="zout" aria-label="縮小">−</button>
+      <button type="button" id="zfit" class="fit" aria-label="全体を表示">全体</button>
+    </div>
+    <div class="loading" id="loading">全国の路線データを読み込み中…</div>
+    <div class="arrived" id="arrived" hidden>到着しました</div>
+    <div class="pop" id="pop" hidden></div>
+    <div class="hud">
+      <div class="tip" id="tip" hidden>▶ を押すと、このルートで出発します</div>
+      <div class="ctl">
+        <button type="button" class="btn play" id="play" aria-label="出発">
+          <svg viewBox="0 0 16 16" id="playIcon"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="btn" id="reset" aria-label="最初に戻す">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5V5h2.5"/></svg>
+        </button>
+      </div>
+      <div class="status">
+        <div class="clock"><b id="clk">09:00</b><span id="elapsed">経過 0分 / 0分</span></div>
+        <div class="now" id="now">再生ボタンで出発します</div>
+      </div>
+      <div class="prog"><i id="progBar"></i></div>
+      <div class="speed">
+        <label for="spd">速さ</label>
+        <input type="range" id="spd" min="0" max="100" value="55">
+        <output id="spdOut" for="spd"></output>
+        <label class="follow"><input type="checkbox" id="follow"> ピンを追う</label>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(()=>{
+// ---------- 簡略海岸線（縮小表示用。拡大すると薄くなる） ----------
+const COAST=[
+ // 本州
+ [130.92,33.95,131.25,33.95,131.57,34.03,131.8,34.03,132.1,33.95,132.22,34.15,132.45,34.35,132.57,34.22,133.08,34.38,133.38,34.45,133.73,34.5,134.0,34.6,134.7,34.78,135.0,34.65,135.2,34.68,135.43,34.65,135.45,34.55,135.25,34.4,135.15,34.22,135.15,33.88,135.35,33.68,135.78,33.45,136.0,33.72,136.2,34.07,136.8,34.28,136.85,34.48,136.52,34.72,136.65,34.97,136.85,35.05,136.9,34.7,137.0,34.8,137.25,34.78,137.1,34.66,137.0,34.58,137.3,34.62,137.75,34.66,138.22,34.6,138.4,34.95,138.85,35.08,138.75,34.85,138.85,34.6,138.95,34.66,139.1,34.95,139.08,35.1,139.15,35.25,139.55,35.3,139.62,35.13,139.7,35.28,139.65,35.45,139.8,35.62,140.1,35.6,139.82,35.3,139.85,34.92,140.1,35.1,140.3,35.15,140.4,35.38,140.87,35.72,140.65,36.0,140.65,36.6,140.78,36.85,140.95,37.05,140.97,37.8,141.0,38.25,141.52,38.28,141.65,38.9,141.9,39.27,141.98,39.65,141.8,40.2,141.55,40.53,141.42,40.75,141.47,41.43,140.92,41.53,140.8,41.15,141.18,41.28,141.13,40.88,140.75,40.83,140.35,41.25,140.33,41.13,140.2,40.78,139.92,40.65,140.03,40.2,139.7,39.93,140.05,39.73,140.03,39.38,139.83,38.92,139.45,38.22,139.05,37.92,138.55,37.37,138.25,37.18,137.85,37.05,137.4,36.82,137.2,36.77,136.98,36.86,136.97,37.05,137.15,37.2,137.35,37.45,136.9,37.4,136.72,37.15,136.77,36.9,136.62,36.6,136.15,36.2,136.07,35.68,135.9,35.6,135.75,35.5,135.55,35.5,135.35,35.52,135.2,35.78,134.8,35.65,134.2,35.55,133.3,35.45,133.05,35.58,132.63,35.43,132.75,35.38,132.07,34.9,131.8,34.7,131.4,34.43,131.15,34.38,130.9,34.33,130.9,34.1],
+ // 九州
+ [130.95,33.92,130.8,33.92,130.5,33.85,130.38,33.6,130.1,33.55,129.95,33.48,129.55,33.35,129.7,33.15,129.65,32.9,129.85,32.73,129.75,32.6,130.05,32.85,130.2,32.6,130.35,32.75,130.15,33.1,130.3,33.18,130.42,33.0,130.6,32.78,130.55,32.5,130.38,32.2,130.18,31.97,130.18,31.8,130.25,31.7,130.28,31.27,130.62,31.22,130.57,31.6,130.75,31.73,130.72,31.5,130.67,31.0,131.1,31.47,131.4,31.6,131.45,31.92,131.65,32.42,131.7,32.6,131.95,32.95,131.65,33.25,131.75,33.55,131.2,33.6,131.0,33.78],
+ // 四国
+ [134.05,34.35,134.6,34.22,134.6,34.05,134.75,33.9,134.18,33.25,133.9,33.5,133.55,33.5,133.28,33.35,133.0,32.95,133.02,32.72,132.72,32.92,132.55,33.22,132.42,33.45,132.02,33.35,132.7,33.75,132.72,33.85,133.0,34.08,133.28,33.97,133.65,34.12,133.8,34.3],
+ // 北海道
+ [140.73,41.77,140.1,41.42,140.12,41.87,139.85,42.45,140.0,42.7,140.5,42.98,140.35,43.35,140.8,43.2,141.0,43.2,141.3,43.25,141.65,43.95,141.7,44.35,141.75,44.88,141.68,45.42,141.93,45.52,142.6,44.93,143.35,44.35,144.25,44.0,144.65,43.92,145.32,44.35,145.19,44.02,145.15,43.65,145.3,43.55,145.58,43.33,145.82,43.38,145.5,43.25,145.1,43.08,144.85,43.0,144.38,42.98,143.33,42.28,143.25,41.93,142.77,42.17,142.37,42.33,141.6,42.63,140.97,42.32,140.85,42.47,140.7,42.58,140.37,42.52,140.28,42.27,140.58,42.1,140.82,42.03,141.15,41.8],
+ // 淡路島・佐渡島
+ [134.98,34.6,135.02,34.55,134.9,34.35,134.75,34.2,134.65,34.25,134.85,34.45],
+ [138.22,38.3,138.5,38.33,138.52,38.12,138.3,38.05,138.45,37.85,138.25,37.8,138.22,38.0]
+];
+
+const $=id=>document.getElementById(id);
+const svg=$("map"), NS="http://www.w3.org/2000/svg";
+const el=(tag,attrs={},parent)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;};
+const dur=m=>{m=Math.round(m);const h=Math.floor(m/60),mm=m%60;return h?`${h}時間${mm?mm+"分":""}`:`${mm}分`;};
+const clock=m=>{m=Math.round(m);const d=Math.floor(m/1440);m=((m%1440)+1440)%1440;return (d>0?"翌":"")+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const reduceMotion=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------- 投影（1単位 ≒ 緯度0.01度 ≒ 1.1km） ----------
+const K=100, COS=Math.cos(36*Math.PI/180);
+const proj=(lon,lat)=>[(lon-128.5)*K*COS,(46-lat)*K];
+const P=(X,Y)=>proj(X/1e5,Y/1e5);
+
+for(const poly of COAST){
+  let d="";for(let i=0;i<poly.length;i+=2){const [x,y]=proj(poly[i],poly[i+1]);d+=(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);}
+  el("path",{d:d+"Z",class:"land"},$("land"));
+}
+
+// ---------- 路線データ ----------
+const OPS={"東日本旅客鉄道":"JR東日本","東海旅客鉄道":"JR東海","西日本旅客鉄道":"JR西日本","北海道旅客鉄道":"JR北海道","四国旅客鉄道":"JR四国","九州旅客鉄道":"JR九州","東京地下鉄":"東京メトロ","東京都":"都営","大阪市高速電気軌道":"Osaka Metro"};
+const KIND_LABEL={s:"新幹線",j:"JR在来線",p:"私鉄・地下鉄",m:"モノレール・新交通",t:"路面電車など"};
+const KIND_W={s:4.4,j:2.3,p:1.9,m:1.7,t:1.5};
+const THRU=new Set(["東北新幹線>上越新幹線","上越新幹線>北陸新幹線","東北新幹線>北陸新幹線","東北新幹線>北海道新幹線","東海道新幹線>山陽新幹線","山陽新幹線>九州新幹線","東北新幹線>田沢湖線","東北新幹線>奥羽線"].flatMap(p=>{const [a,b]=p.split(">");return [a+">"+b,b+">"+a];}));
+const dispName=nm=>{let s=nm.replace(/^\d+号線/,"").replace(/^[(（](.*)[)）]$/,"$1");return s||nm;};
+let LINES=[],GR=[],ST=[],EDGES=[],GKEY=new Map(),edgeOf=new Map();
+
+function init(D){
+  LINES=D.lines.map(([nm,op,kind,c,v],i)=>({i,nm,op,kind,c,v,disp:dispName(nm),opd:OPS[op]||op}));
+  GR=D.groups.map(([key,name,x,y,rank],i)=>({i,key,name,p:P(x,y),rank,mem:[]}));
+  ST=D.st.map(([li,g],i)=>({i,li,g,adj:[],pos:null}));
+  ST.forEach(s=>GR[s.g].mem.push(s.i));
+  GR.forEach(g=>{g.lines=[...new Set(g.mem.map(i=>ST[i].li))];GKEY.set(g.key,g.i);});
+  EDGES=D.edges.map(([a,b,len,f],i)=>{
+    let x=f[0],y=f[1]; const pts=[P(x,y)];
+    for(let k=2;k<f.length;k+=2){x+=f[k];y+=f[k+1];pts.push(P(x,y));}
+    const L=LINES[ST[a].li], min=len/1000/L.v*60+0.5;
+    ST[a].adj.push([b,min,i]); ST[b].adj.push([a,min,i]);
+    if(!ST[a].pos) ST[a].pos=pts[0]; if(!ST[b].pos) ST[b].pos=pts[pts.length-1];
+    edgeOf.set(a+">"+b,i); edgeOf.set(b+">"+a,i);
+    return {a,b,len,pts,li:ST[a].li,min};
+  });
+  ST.forEach(s=>{if(!s.pos) s.pos=GR[s.g].p;});
+  // 路線を描画（1路線1パス）
+  const dl=LINES.map(()=>[]);
+  for(const e of EDGES) dl[e.li].push(pd(e.pts));
+  const lg=$("lines");
+  LINES.forEach((L,i)=>{ if(!dl[i].length) return; el("path",{d:dl[i].join(""),stroke:L.c,"stroke-width":KIND_W[L.kind],class:"k-"+L.kind},lg); });
+  // 新幹線を最前面に
+  [...lg.querySelectorAll(".k-s")].forEach(p=>lg.appendChild(p));
+  // 駅候補
+  $("stlist").innerHTML=GR.map(g=>`<option value="${esc(g.key)}">`).join("");
+  $("legend").innerHTML=Object.entries(KIND_LABEL).map(([k,v])=>`<span><i style="height:${Math.max(2,KIND_W[k])}px;background:var(--ink)"></i>${v}（${LINES.filter(L=>L.kind===k).length}路線）</span>`).join("");
+  $("loading").hidden=true;
+  applyView(); search();
+}
+const pd=pts=>{let s="";for(let i=0;i<pts.length;i++)s+=(i?"L":"M")+pts[i][0].toFixed(3)+" "+pts[i][1].toFixed(3);return s;};
+
+// ---------- 経路探索 ----------
+function xfer(u,v){
+  const A=LINES[ST[u].li],B=LINES[ST[v].li];
+  if(A.nm===B.nm||THRU.has(A.nm+">"+B.nm)) return 0;
+  if(A.op===B.op) return (A.kind==="j"&&B.kind==="j")?3:5;
+  return 8;
+}
+class Heap{constructor(){this.k=[];this.v=[];}
+  push(key,val){const k=this.k,v=this.v;let i=k.length;k.push(key);v.push(val);while(i>0){const p=(i-1)>>1;if(k[p]<=key)break;k[i]=k[p];v[i]=v[p];i=p;}k[i]=key;v[i]=val;}
+  pop(){const k=this.k,v=this.v,top=v[0],tk=k[0];const lk=k.pop(),lv=v.pop();if(k.length){let i=0;const n=k.length;while(true){let c=2*i+1;if(c>=n)break;if(c+1<n&&k[c+1]<k[c])c++;if(k[c]>=lk)break;k[i]=k[c];v[i]=v[c];i=c;}k[i]=lk;v[i]=lv;}this.lastKey=tk;return top;}
+  get size(){return this.k.length;}}
+function dijkstra(sg,tg,opt={}){
+  const n=ST.length,dist=new Float64Array(n).fill(Infinity),prev=new Int32Array(n).fill(-1),how=new Int32Array(n).fill(-1);
+  const pen=opt.pen, extra=opt.extra||0, h=new Heap();
+  for(const s of GR[sg].mem){dist[s]=0;h.push(0,s);}
+  while(h.size){
+    const u=h.pop(), d=h.lastKey; if(d>dist[u]) continue;
+    if(ST[u].g===tg) return buildPath(u,prev,how);
+    for(const [v,min,ei] of ST[u].adj){const nd=d+min*(pen&&pen.get(ei)||1);if(nd<dist[v]){dist[v]=nd;prev[v]=u;how[v]=ei;h.push(nd,v);}}
+    if(how[u]!==-2) for(const v of GR[ST[u].g].mem){ if(v===u) continue; const c=xfer(u,v); const nd=d+c+(c?extra:0); if(nd<dist[v]){dist[v]=nd;prev[v]=u;how[v]=-2;h.push(nd,v);} }
+  }
+  return null;
+}
+function buildPath(u,prev,how){
+  const seq=[];while(u!==-1){seq.unshift([u,how[u]]);u=prev[u];}
+  const legs=[];let cur=null;
+  for(const [s,hw] of seq){
+    if(!cur||hw===-2){cur={li:ST[s].li,sts:[s],eis:[]};legs.push(cur);}
+    else {cur.sts.push(s);cur.eis.push(hw);}
+  }
+  return finalize(legs.filter(g=>g.eis.length));
+}
+function finalize(legs){
+  let total=0,km=0,xf=0;
+  legs.forEach((g,gi)=>{
+    g.min=g.eis.reduce((a,ei)=>a+EDGES[ei].min,0); g.km=g.eis.reduce((a,ei)=>a+EDGES[ei].len,0)/1000;
+    g.wait=0;g.through=false;
+    if(gi>0){g.wait=xfer(legs[gi-1].sts[legs[gi-1].sts.length-1],g.sts[0]);g.through=g.wait===0;if(!g.through)xf++;}
+    total+=g.min+g.wait; km+=g.km;
+  });
+  const phys=legs.map((g,i)=>g.sts.slice(i?1:0).map(s=>ST[s].g).join(",")).join(",");
+  return {legs,total,km,xf,phys};
+}
+function candidates(a,b){
+  const best=dijkstra(a,b); if(!best) return [];
+  const out=new Map([[best.phys,best]]), add=r=>{if(r&&!out.has(r.phys))out.set(r.phys,r);};
+  add(dijkstra(a,b,{extra:30}));
+  const pen=new Map();
+  for(let k=0;k<5;k++){
+    for(const r of out.values()) for(const g of r.legs) for(const ei of g.eis) pen.set(ei,(pen.get(ei)||1)*1.35);
+    add(dijkstra(a,b,{pen}));
+  }
+  const lim=best.total*1.7+30;
+  return [...out.values()].filter(r=>r.total<=lim).sort((x,y)=>x.total-y.total).slice(0,5);
+}
+function viaCandidates(stops){
+  const parts=[];
+  for(let i=0;i<stops.length-1;i++){const c=candidates(stops[i],stops[i+1]);if(!c.length)return [];parts.push(c.slice(0,3));}
+  const combine=choice=>{const legs=[];
+    choice.forEach((ci,pi)=>{for(const g of parts[pi][ci].legs){const last=legs[legs.length-1];
+      if(last&&last.li===g.li&&last.sts[last.sts.length-1]===g.sts[0]){last.sts.push(...g.sts.slice(1));last.eis.push(...g.eis);}
+      else legs.push({li:g.li,sts:[...g.sts],eis:[...g.eis]});}});
+    return finalize(legs);};
+  const found=new Map(),add=r=>{const o=found.get(r.phys);if(!o||r.total<o.total)found.set(r.phys,r);};
+  const base=parts.map(()=>0); add(combine(base));
+  parts.forEach((p,pi)=>p.forEach((_,ci)=>{if(ci){const c=[...base];c[pi]=ci;add(combine(c));}}));
+  for(let a=0;a<parts.length;a++)for(let b=a+1;b<parts.length;b++)if(parts[a][1]&&parts[b][1]){const c=[...base];c[a]=1;c[b]=1;add(combine(c));}
+  return [...found.values()].sort((x,y)=>x.total-y.total).slice(0,5);
+}
+const legStart=g=>GR[ST[g.sts[0]].g].name, legEnd=g=>GR[ST[g.sts[g.sts.length-1]].g].name;
+const edgePts=(ei,from)=>{const e=EDGES[ei];return e.a===from?e.pts:[...e.pts].reverse();};
+
+// ---------- ビュー ----------
+let vb={x:0,y:0,w:1400,h:1400}, unit=1, lastUnit=-1;
+const DETAIL=0.42;
+function fitBox(pts,pad=0.12){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const [x,y] of pts){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);}
+  const cw=svg.clientWidth||800,ch=svg.clientHeight||600,hud=ch>500?0.2:0.28;
+  let w=Math.max(x1-x0,4)*(1+pad*2),h=Math.max(y1-y0,4)*(1+pad*2+hud);
+  if(w/h<cw/ch) w=h*cw/ch; else h=w*ch/cw;
+  return {x:(x0+x1)/2-w/2,y:(y0+y1)/2-h/2+h*hud*0.35,w,h};
+}
+const JAPAN=[proj(129.5,31),proj(145.8,45.5)];
+function applyView(){
+  const cw=svg.clientWidth||800,ch=svg.clientHeight||600;
+  vb.h=vb.w*ch/cw; svg.setAttribute("viewBox",`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  unit=vb.w/cw;
+  if(unit!==lastUnit){
+    lastUnit=unit;
+    svg.dataset.lod=unit>1?"0":unit>0.3?"1":"2";
+    const coast=Math.max(0,Math.min(1,(unit-0.12)/0.35));
+    $("seaRect").style.opacity=coast; $("land").style.opacity=coast;
+    if(!drawnU||Math.abs(Math.log(unit/drawnU))>0.12||(unit<DETAIL)!==(drawnU<DETAIL)) drawRoute();
+  }
+  renderStations(); placePin(); hidePop();
+}
+function svgPoint(cx,cy){const r=svg.getBoundingClientRect();return [vb.x+(cx-r.left)/r.width*vb.w, vb.y+(cy-r.top)/r.height*vb.h];}
+function zoomAt(cx,cy,f){
+  camAnim=null; autoZoom=false;
+  const [px,py]=svgPoint(cx,cy); const nw=Math.min(Math.max(vb.w*f,2.5),2600); const s=nw/vb.w;
+  vb.x=px-(px-vb.x)*s; vb.y=py-(py-vb.y)*s; vb.w=nw; applyView();
+}
+svg.addEventListener("wheel",e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,Math.exp(e.deltaY*0.0015));},{passive:false});
+const ptrs=new Map(); let moved=false,pinchD=0;
+svg.addEventListener("pointerdown",e=>{ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved=false;svg.setPointerCapture(e.pointerId);svg.classList.add("drag");
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinchD=Math.hypot(a[0]-b[0],a[1]-b[1]);}});
+svg.addEventListener("pointermove",e=>{
+  if(!ptrs.has(e.pointerId))return; const [ox,oy]=ptrs.get(e.pointerId);
+  if(ptrs.size===1){const dx=e.clientX-ox,dy=e.clientY-oy; if(Math.abs(dx)+Math.abs(dy)>3) moved=true;
+    if(moved){camAnim=null;const r=svg.getBoundingClientRect();vb.x-=dx/r.width*vb.w;vb.y-=dy/r.height*vb.h;ptrs.set(e.pointerId,[e.clientX,e.clientY]);if(followEl.checked)followEl.checked=false;applyView();}}
+  else{ptrs.set(e.pointerId,[e.clientX,e.clientY]);const [a,b]=[...ptrs.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);
+    if(pinchD){moved=true;zoomAt((a[0]+b[0])/2,(a[1]+b[1])/2,pinchD/d);} pinchD=d;}
+});
+const endPtr=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinchD=0;if(!ptrs.size)svg.classList.remove("drag");};
+svg.addEventListener("pointerup",e=>{
+  if(!moved&&ptrs.size===1){const t=document.elementsFromPoint(e.clientX,e.clientY).find(x=>x.closest&&x.closest(".st"));
+    if(t) showPop(+t.closest(".st").dataset.g,e.clientX,e.clientY); else hidePop();}
+  endPtr(e);});
+svg.addEventListener("pointercancel",endPtr);
+const center=()=>{const r=svg.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];};
+$("zin").onclick=()=>zoomAt(...center(),0.6);
+$("zout").onclick=()=>zoomAt(...center(),1.6);
+$("zfit").onclick=()=>{followEl.checked=false;camAnim=null;vb=fitBox(JAPAN,0.02);applyView();};
+window.addEventListener("resize",()=>{lastUnit=-1;applyView();});
+
+// ---------- 駅の表示（見えている範囲だけ描く） ----------
+let stBox=null, routeG=new Set(), endG=new Set(), viaG=new Set(), xferG=new Set();
+function renderStations(force){
+  if(!GR.length) return;
+  const m=0.3;
+  if(!force&&stBox&&Math.abs(Math.log(unit/stBox.u))<0.1&&vb.x>=stBox.x0&&vb.y>=stBox.y0&&vb.x+vb.w<=stBox.x1&&vb.y+vb.h<=stBox.y1) return;
+  const x0=vb.x-vb.w*m,y0=vb.y-vb.h*m,x1=vb.x+vb.w*(1+m),y1=vb.y+vb.h*(1+m);
+  stBox={u:unit,x0,y0,x1,y1};
+  const minRank=unit>1.3?9:unit>0.7?7:unit>0.32?4:unit>0.14?2:1;
+  let list=[];
+  for(const g of GR){const [x,y]=g.p;if(x<x0||x>x1||y<y0||y>y1)continue;
+    const onR=routeG.has(g.i); if(g.rank>=minRank||onR&&unit<0.7||endG.has(g.i)||viaG.has(g.i)) list.push(g);}
+  const pri=g=>(endG.has(g.i)||viaG.has(g.i)?1000:0)+(xferG.has(g.i)?200:0)+(routeG.has(g.i)?50:0)+g.rank;
+  list.sort((a,b)=>pri(b)-pri(a));
+  if(list.length>1400) list=list.slice(0,1400);
+  // ラベルの重なりを避ける
+  const occ=[], cell=new Map(), C=60;
+  const free=(bx,by,bw,bh)=>{for(let i=Math.floor(bx/C);i<=Math.floor((bx+bw)/C);i++)for(let j=Math.floor(by/C);j<=Math.floor((by+bh)/C);j++){const a=cell.get(i+","+j);if(a)for(const r of a)if(bx<r[0]+r[2]&&bx+bw>r[0]&&by<r[1]+r[3]&&by+bh>r[1])return false;}return true;};
+  const take=(bx,by,bw,bh)=>{for(let i=Math.floor(bx/C);i<=Math.floor((bx+bw)/C);i++)for(let j=Math.floor(by/C);j<=Math.floor((by+bh)/C);j++){const k=i+","+j;(cell.get(k)||cell.set(k,[]).get(k)).push([bx,by,bw,bh]);}};
+  const frag=document.createDocumentFragment(), maxLabels=unit>0.7?60:260; let nl=0;
+  const dots=[];
+  for(const g of list){
+    const sx=(g.p[0]-vb.x)/unit, sy=(g.p[1]-vb.y)/unit;
+    const big=endG.has(g.i)||viaG.has(g.i), fs=big?13.5:g.rank>=7?12.5:11;
+    let lab=false;
+    if(nl<maxLabels){const w=g.name.length*fs+10,h=fs+4;
+      if(free(sx+5,sy-h/2-1,w,h)){take(sx+5,sy-h/2-1,w,h);lab=true;nl++;} else if(big){lab=true;}}
+    dots.push([g,lab]);
+  }
+  for(const [g,lab] of dots){
+    const cls="st"+(g.lines.length>1?" x":"")+(g.rank>=7?" major":"")+(endG.has(g.i)?" end":"")+(viaG.has(g.i)?" via":"")+(routeSel&&!routeG.has(g.i)?" faded":"");
+    const e=el("g",{class:cls,transform:`translate(${g.p[0].toFixed(3)} ${g.p[1].toFixed(3)}) scale(${unit})`,"data-g":g.i},frag);
+    el("circle",{class:"hit",r:10},e); el("circle",{class:"m",r:g.lines.length>1?4.2:3},e);
+    if(lab){const t=el("text",{x:7,y:4},e);t.textContent=g.name;}
+  }
+  const host=$("stations"); host.replaceChildren(frag);
+}
+
+// 駅ポップアップ
+const pop=$("pop");
+function showPop(gi,cx,cy){
+  const g=GR[gi], r=$("wrap").getBoundingClientRect();
+  const ls=g.lines.map(i=>LINES[i].disp); const lsTxt=ls.slice(0,6).join("・")+(ls.length>6?` ほか${ls.length-6}路線`:"");
+  pop.innerHTML=`<b>${esc(g.name)}</b><span class="ls">${esc(lsTxt)}</span><div><button type="button" data-a="from">出発</button><button type="button" data-a="via"${$("vias").children.length>=3?" disabled title=\"経由駅は3つまでです\"":""}>経由</button><button type="button" class="t" data-a="to">到着</button></div>`;
+  pop.style.left=Math.min(Math.max(cx-r.left,100),r.width-100)+"px"; pop.style.top=Math.max(cy-r.top,110)+"px"; pop.hidden=false;
+  pop.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    if(b.dataset.a==="via"){const empty=[...$("vias").querySelectorAll("input")].find(i=>!i.value.trim());if(empty)empty.value=g.key;else addVia(g.key);}
+    else $(b.dataset.a).value=g.key;
+    hidePop();search();});
+}
+function hidePop(){pop.hidden=true;}
+
+// ---------- 検索と一覧 ----------
+let routes=[], routeSel=null, sortMode="time";
+function search(){
+  if(!GR.length) return;
+  const f=$("from").value.trim(), t=$("to").value.trim(), err=$("err"), vias=viaVals();
+  const stops=[f,...vias,t], fail=m=>{err.textContent=m;err.hidden=false;};
+  err.hidden=true;
+  const bad=stops.find(x=>!GKEY.has(x));
+  if(bad!==undefined) return fail(bad?`「${bad}」が見つかりません。入力欄の候補から選ぶか、地図上の駅をクリックしてください。同じ名前の駅が複数ある場合は「府中（京王電鉄）」のように区別しています。`:"出発駅と到着駅を入力してください。");
+  const ids=stops.map(x=>GKEY.get(x));
+  if(ids[0]===ids[ids.length-1]&&!vias.length) return fail("出発駅と到着駅が同じです。別の駅を選んでください。");
+  for(let i=0;i<ids.length-1;i++) if(ids[i]===ids[i+1]) return fail(`「${stops[i]}」が続けて指定されています。経由駅を見直してください。`);
+  routes=vias.length?viaCandidates(ids):candidates(ids[0],ids[ids.length-1]);
+  if(!routes.length) return fail("鉄道だけでつながる経路が見つかりませんでした（離島や海を越える区間など）。");
+  routes.forEach(r=>{r.vias=ids.slice(1,-1);r.viaNames=vias.map(v=>GR[GKEY.get(v)].name);});
+  selectRoute(routes[0]);
+}
+function depMin(){const [h,m]=($("dep").value||"09:00").split(":").map(Number);return h*60+m;}
+function sorted(){const a=[...routes];if(sortMode==="xfer")a.sort((x,y)=>x.xf-y.xf||x.total-y.total);return a;}
+function chipsHTML(r){
+  const parts=[];let prev=null;
+  for(const g of r.legs){const L=LINES[g.li];if(prev&&prev.disp===L.disp&&g.through)continue;prev=L;parts.push(`<span class="chip"><i style="background:${L.c}"></i>${esc(L.disp)}</span>`);}
+  return parts.join("");
+}
+function renderList(){
+  const list=$("routes"), dep=depMin();
+  $("rcount").textContent=`ルート候補 ${routes.length}件`;
+  const minT=Math.min(...routes.map(r=>r.total)), minX=Math.min(...routes.map(r=>r.xf));
+  list.innerHTML="";
+  sorted().forEach((r,i)=>{
+    const li=document.createElement("li"); li.className="route"+(r===routeSel?" on":"");
+    const tags=[]; if(r.total===minT)tags.push('<span class="badge fast">最速</span>'); if(r.xf===minX)tags.push('<span class="badge">乗換最少</span>');
+    if(r.legs.some(g=>LINES[g.li].kind==="s"))tags.push('<span class="badge">新幹線</span>');
+    li.innerHTML=`<button type="button" class="rhead" aria-expanded="${r===routeSel}">
+      <span class="rnum">${String(i+1).padStart(2,"0")}</span>
+      <span class="rtime">${clock(dep)}→${clock(dep+r.total)}</span>
+      <span class="rdur">${dur(r.total)}</span>
+      <span class="rmeta"><span>乗換 ${r.xf}回</span><span>約${r.km<20?r.km.toFixed(1):Math.round(r.km)}km</span>${r.viaNames&&r.viaNames.length?`<span>${esc(r.viaNames.join("・"))} 経由</span>`:""}</span>
+      <span class="chips">${chipsHTML(r)}</span>
+      ${tags.length?`<span class="tags">${tags.join("")}</span>`:""}
+    </button>${r===routeSel?detailHTML(r,dep):""}`;
+    li.querySelector(".rhead").onclick=()=>selectRoute(r);
+    const cta=li.querySelector(".cta"); if(cta) cta.onclick=()=>{if(matchMedia("(max-width:760px)").matches) $("wrap").scrollIntoView({behavior:"smooth",block:"start"}); play();};
+    list.appendChild(li);
+  });
+}
+function detailHTML(r,dep){
+  let t=dep, h='<div class="detail">'; const vs=new Set(r.vias||[]);
+  const vt=s=>vs.has(ST[s].g)?'<span class="vtag">経由</span>':"";
+  r.legs.forEach((g,gi)=>{
+    const L=LINES[g.li], s0=g.sts[0], s1=g.sts[g.sts.length-1];
+    if(gi>0){h+=`<div class="tl xf" data-x="${gi}"><span></span><span class="xbar"></span><span class="info">${g.through?"直通運転（乗換なし）":"乗換 "+g.wait+"分"}<span class="nowtag">${g.through?"直通中":"乗換中"}</span></span></div>`;t+=g.wait;}
+    const mid=g.sts.slice(1,-1).filter(s=>vs.has(ST[s].g)).map(s=>GR[ST[s].g].name);
+    h+=`<div class="lblock" data-gi="${gi}" style="--lc:${L.c}">`;
+    h+=`<div class="tl"><span class="t">${clock(t)}</span><span class="node"></span><span><span class="n">${esc(GR[ST[s0].g].name)}</span><span class="k">発</span>${gi>0?vt(s0):""}</span></div>`;
+    h+=`<div class="tl leg"><span></span><span class="bar" style="background:${L.c}"><i class="pdot"></i></span><span class="info"><b>${esc(L.disp)}</b>（${esc(L.opd)}・${KIND_LABEL[L.kind]}）<br>${dur(g.min)}・約${g.km<20?g.km.toFixed(1):Math.round(g.km)}km・${g.sts.length-2>0?`途中${g.sts.length-2}駅`:"途中駅なし"}${mid.length?`・<b>${esc(mid.join("・"))}</b> 経由`:""}<span class="where"></span></span></div>`;
+    t+=g.min;
+    h+=`<div class="tl"><span class="t">${clock(t)}</span><span class="node"></span><span><span class="n">${esc(GR[ST[s1].g].name)}</span><span class="k">着</span>${gi<r.legs.length-1?vt(s1):""}</span></div>`;
+    h+=`</div>`;
+  });
+  return h+`<button type="button" class="cta"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>このルートで出発</button></div>`;
+}
+// 走行中の区間を一覧で強調する
+let legT=[], legUI={gi:-2,x:-2};
+function markLegs(force){
+  const det=document.querySelector(".route.on .detail"); if(!det||!routeSel) return;
+  let gi=-1, x=-1, f=0;
+  if(T>0){
+    for(let k=0;k<legT.length;k++){const L=legT[k];
+      if(T<L.start){ if(k>0&&T>=L.start-L.wait){x=k;} break; }
+      if(T<=L.end){gi=k;f=(T-L.start)/(L.end-L.start||1);break;}
+    }
+    if(T>=routeSel.total){gi=legT.length;}
+  }
+  if(force||gi!==legUI.gi||x!==legUI.x){
+    legUI={gi,x};
+    det.querySelectorAll(".lblock").forEach(b=>{const k=+b.dataset.gi;b.classList.toggle("now",k===gi);b.classList.toggle("done",T>0&&(k<gi||(x>=0&&k<x)));});
+    det.querySelectorAll(".xf").forEach(b=>{const k=+b.dataset.x;b.classList.toggle("now",k===x);b.classList.toggle("done",T>0&&(k<=gi&&k!==x||(x>=0&&k<x)));});
+    const cur=det.querySelector(".lblock.now,.xf.now");
+    if(cur&&playing&&!matchMedia("(max-width:760px)").matches) cur.scrollIntoView({block:"nearest",behavior:reduceMotion()?"auto":"smooth"});
+    det.classList.toggle("running",T>0&&T<routeSel.total);
+  }
+  const blk=gi>=0&&gi<legT.length?det.querySelector(`.lblock[data-gi="${gi}"]`):null;
+  if(blk){blk.style.setProperty("--p",(f*100).toFixed(1)+"%");
+    const w=blk.querySelector(".where"),pos=posAt(T),b=track[Math.min(pos.i+1,track.length-1)];
+    if(w&&b&&b.from!=null){const txt=`いま ${GR[ST[b.from].g].name} → ${GR[ST[b.to].g].name}`;if(w.textContent!==txt)w.textContent=txt;}}
+}
+
+// ---------- 選択ルート ----------
+let track=[], T=0, playing=false, routeGeom=[], ZW=40;
+function selectRoute(r){
+  routeSel=r; pause(); T=0; $("arrived").hidden=true; camAnim=null;
+  $("lines").classList.add("dim");
+  routeG=new Set(r.legs.flatMap(g=>g.sts.map(s=>ST[s].g)));
+  const first=ST[r.legs[0].sts[0]].g, lastLeg=r.legs[r.legs.length-1], lastG=ST[lastLeg.sts[lastLeg.sts.length-1]].g;
+  endG=new Set([first,lastG]); viaG=new Set(r.vias||[]);
+  xferG=new Set(r.legs.slice(1).map(g=>ST[g.sts[0]].g));
+  routeGeom=r.legs.map(g=>{let pts=[];g.eis.forEach((ei,k)=>{const p=edgePts(ei,g.sts[k]);pts=pts.concat(k?p.slice(1):p);});return {pts,c:LINES[g.li].c,kind:LINES[g.li].kind};});
+  // タイムライン
+  track=[]; let t=0;
+  r.legs.forEach((g,gi)=>{
+    if(gi>0){ t+=g.wait; track.push({p:ST[g.sts[0]].pos,t,gi,st:g.sts[0],dwell:true}); }
+    else track.push({p:ST[g.sts[0]].pos,t,gi,st:g.sts[0]});
+    g.eis.forEach((ei,k)=>{
+      const from=g.sts[k],to=g.sts[k+1],pts=edgePts(ei,from),m=EDGES[ei].min;
+      const cum=[0];for(let j=1;j<pts.length;j++)cum.push(cum[j-1]+Math.hypot(pts[j][0]-pts[j-1][0],pts[j][1]-pts[j-1][1]));
+      const tot=cum[cum.length-1]||1;
+      for(let j=1;j<pts.length;j++) track.push({p:pts[j],t:t+m*cum[j]/tot,gi,from,to,st:j===pts.length-1?to:null});
+      t+=m;
+    });
+  });
+  legT=[];{let t2=0;r.legs.forEach(g=>{t2+=g.wait;legT.push({start:t2,end:t2+g.min,wait:g.wait});t2+=g.min;});}
+  const allPts=routeGeom.flatMap(g=>g.pts);
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const [x,y] of allPts){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);}
+  ZW=Math.max(4,Math.min(55,Math.hypot(x1-x0,y1-y0)*0.25));
+  renderList(); lastUnit=-1; drawnU=0; vb=fitBox(allPts); applyView(); renderStations(true); update(); markLegs(true); setHint();
+}
+let drawnU=0;
+function drawRoute(){
+  drawnU=unit;
+  const hl=$("hl"); hl.innerHTML=""; if(!routeGeom.length) return;
+  if(unit>=DETAIL){
+    for(const g of routeGeom) el("path",{d:pd(g.pts),class:"casing","stroke-width":g.kind==="s"?9:7},hl);
+    for(const g of routeGeom) el("path",{d:pd(g.pts),class:"col",stroke:g.c,"stroke-width":g.kind==="s"?5.4:3.8},hl);
+    return;
+  }
+  const u=unit, w=g=>g.kind==="s"?1:0.8;
+  for(const g of routeGeom) el("path",{d:pd(g.pts),class:"bed","stroke-width":(17*u*w(g)).toFixed(4)},hl);
+  for(const g of routeGeom) el("path",{d:pd(g.pts),class:"ties",stroke:g.c,"stroke-width":(12*u*w(g)).toFixed(4),"stroke-dasharray":`${(2.4*u).toFixed(4)} ${(4.4*u).toFixed(4)}`},hl);
+  for(const g of routeGeom) for(const sd of [-1,1]) el("path",{d:pd(offsetPts(g.pts,sd*3.3*u*w(g))),class:"railp","stroke-width":(2.1*u).toFixed(4)},hl);
+}
+function offsetPts(pts,o){return pts.map((p,i)=>{const a=pts[Math.max(i-1,0)],b=pts[Math.min(i+1,pts.length-1)];const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return [p[0]-dy/l*o,p[1]+dx/l*o];});}
+
+// ---------- ピン ----------
+const pinG=$("pin");
+pinG.innerHTML=`<ellipse cx="0" cy="0" rx="7" ry="2.6" fill="#000" opacity=".22"></ellipse>
+<g class="pbody"><path d="M0 0 C-2 -7 -10 -12 -10 -21 A10 10 0 1 1 10 -21 C10 -12 2 -7 0 0Z" fill="var(--pin)" stroke="var(--land)" stroke-width="1.6"></path>
+<circle cx="0" cy="-21" r="4.2" fill="var(--pin-ink)"></circle></g>`;
+const pbody=pinG.querySelector(".pbody");
+let pinXY=[0,0], hint=0;
+function posAt(T){
+  if(!track.length) return {p:[0,0],i:0};
+  if(T<=0) return {p:track[0].p,i:0};
+  let i=Math.min(hint,track.length-2); if(track[i].t>T) i=0;
+  for(;i<track.length-1;i++){const a=track[i],b=track[i+1];
+    if(T<=b.t){hint=i;const f=b.t>a.t?(T-a.t)/(b.t-a.t):1;return {p:[a.p[0]+(b.p[0]-a.p[0])*f,a.p[1]+(b.p[1]-a.p[1])*f],i};}}
+  return {p:track[track.length-1].p,i:track.length-1};
+}
+function placePin(){pinG.setAttribute("transform",`translate(${pinXY[0].toFixed(4)} ${pinXY[1].toFixed(4)}) scale(${unit})`);}
+const followEl=$("follow");
+function update(){
+  if(!routeSel) return;
+  const total=routeSel.total, pos=posAt(T); pinXY=pos.p; placePin();
+  let d="";for(let i=0;i<=pos.i&&i<track.length;i++) d+=(i?"L":"M")+track[i].p[0].toFixed(3)+" "+track[i].p[1].toFixed(3);
+  if(T>0) d+="L"+pos.p[0].toFixed(3)+" "+pos.p[1].toFixed(3); $("trail").setAttribute("d",T>0?d:"");
+  $("clk").textContent=clock(depMin()+T);
+  $("elapsed").textContent=`経過 ${dur(T)} / ${dur(total)}`;
+  $("progBar").style.width=(T/total*100).toFixed(2)+"%";
+  const b=track[Math.min(pos.i+1,track.length-1)], gname=s=>GR[ST[s].g].name;
+  let msg;
+  if(T<=0) msg=`${gname(track[0].st)}駅で待機中。再生ボタンで出発します`;
+  else if(T>=total) msg=`${gname(track[track.length-1].st)}駅に到着`;
+  else if(b.dwell){const g=routeSel.legs[b.gi],L=LINES[g.li];msg=g.through?`${gname(b.st)}駅 そのまま${L.disp}へ直通`:`${gname(b.st)}駅で${L.disp}に乗換中`;}
+  else msg=`${LINES[routeSel.legs[b.gi].li].disp}　${gname(b.from)} → ${gname(b.to)}`;
+  $("now").textContent=msg; markLegs();
+  if(followEl.checked&&!camAnim){vb.x=pinXY[0]-vb.w/2;vb.y=pinXY[1]-vb.h*0.42;svg.setAttribute("viewBox",`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);renderStations();hidePop();}
+}
+const spd=$("spd");
+const rate=()=>0.5*Math.pow(240,spd.value/100);
+function showRate(){const r=rate();$("spdOut").textContent=`1秒で${r<10?r.toFixed(1):Math.round(r)}分（${Math.round(r*60).toLocaleString()}倍速）`;}
+spd.oninput=showRate; showRate();
+
+// ---------- カメラ ----------
+let camAnim=null;
+function followBox(w){const cw=svg.clientWidth||800,ch=svg.clientHeight||600,h=w*ch/cw;return {x:pinXY[0]-w/2,y:pinXY[1]-h*0.42,w};}
+function animateView(target,ms,done){camAnim={from:{...vb},target,st:performance.now(),ms,done};
+  requestAnimationFrame(function f(now){if(stepCam(now)) requestAnimationFrame(f);});}
+function stepCam(now){
+  const c=camAnim; if(!c) return false;
+  const cw=svg.clientWidth||800,ch=svg.clientHeight||600;
+  let k=Math.min((now-c.st)/c.ms,1); if(reduceMotion()) k=1;
+  const e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;
+  const fh=c.from.w*ch/cw,th=c.target.w*ch/cw;
+  const fx=c.from.x+c.from.w/2,fy=c.from.y+fh/2,tx=c.target.x+c.target.w/2,ty=c.target.y+th/2;
+  const w=Math.exp(Math.log(c.from.w)+(Math.log(c.target.w)-Math.log(c.from.w))*e),h=w*ch/cw;
+  vb.w=w;vb.x=fx+(tx-fx)*e-w/2;vb.y=fy+(ty-fy)*e-h/2;applyView();
+  if(k>=1){camAnim=null;c.done&&c.done();return false;}
+  return true;
+}
+const routeBox=r=>fitBox(routeGeom.flatMap(g=>g.pts));
+// 駅の混み具合に合わせた拡大率：近くの駅どうしが画面上で約75px離れて見える幅
+let autoZoom=true, zoomTarget=null, ggrid=null;
+const GC=2;
+function buildGrid(){ggrid=new Map();for(const g of GR){const k=Math.floor(g.p[0]/GC)+","+Math.floor(g.p[1]/GC);(ggrid.get(k)||ggrid.set(k,[]).get(k)).push(g);}}
+function densityWidth(p){
+  if(!ggrid) buildGrid();
+  const cx=Math.floor(p[0]/GC),cy=Math.floor(p[1]/GC),ds=[];
+  for(let r=1;r<=4&&ds.length<6;r++){ds.length=0;
+    for(let i=cx-r;i<=cx+r;i++)for(let j=cy-r;j<=cy+r;j++){const a=ggrid.get(i+","+j);if(a)for(const g of a){const d=Math.hypot(g.p[0]-p[0],g.p[1]-p[1]);if(d>0.05)ds.push(d);}}}
+  ds.sort((a,b)=>a-b);
+  const spacing=ds.length>=3?(ds[0]+ds[1]+ds[2])/3:ZW;   // 近い3駅までの平均距離
+  const cw=svg.clientWidth||800;
+  return Math.max(2.2,Math.min(ZW,spacing/75*cw));
+}
+function zoomToPin(){autoZoom=true;zoomTarget=densityWidth(pinXY);const w=Math.min(vb.w,zoomTarget);animateView(followBox(w),vb.w>ZW*1.3?1400:500);}
+followEl.onchange=()=>{if(followEl.checked) zoomToPin();};
+
+let last=0, raf=0;
+function tick(ts){
+  if(!playing) return;
+  const dt=Math.min((ts-(last||ts))/1000,0.1); last=ts;
+  if(camAnim){raf=requestAnimationFrame(tick);return;}
+  T=Math.min(T+dt*rate(),routeSel.total);
+  if(followEl.checked&&autoZoom){
+    const tgt=densityWidth(posAt(T).p); zoomTarget=zoomTarget?Math.exp(Math.log(zoomTarget)+(Math.log(tgt)-Math.log(zoomTarget))*(1-Math.exp(-dt*2))):tgt;
+    const nw=Math.exp(Math.log(vb.w)+(Math.log(zoomTarget)-Math.log(vb.w))*(1-Math.exp(-dt*1.6)));
+    if(Math.abs(nw/vb.w-1)>0.002){vb.w=nw;const p=posAt(T).p;const ch=svg.clientHeight||600,cw=svg.clientWidth||800;vb.h=nw*ch/cw;vb.x=p[0]-nw/2;vb.y=p[1]-vb.h*0.42;applyView();}
+  }
+  const moving=T<routeSel.total;
+  pbody.setAttribute("transform",moving&&!reduceMotion()?`translate(0 ${(-Math.abs(Math.sin(ts/160))*2.4).toFixed(2)})`:"");
+  update();
+  if(!moving){pause();const L=routeSel.legs[routeSel.legs.length-1];$("arrived").textContent=`${GR[ST[L.sts[L.sts.length-1]].g].name}に到着しました`;$("arrived").hidden=false;
+    const r=routeSel;setTimeout(()=>{if(routeSel===r&&!playing){followEl.checked=false;animateView(routeBox(r),1500);}},900);return;}
+  raf=requestAnimationFrame(tick);
+}
+const ICON_PLAY='<path d="M4 2.5v11l9-5.5z" fill="currentColor"/>', ICON_PAUSE='<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/>';
+function setHint(){const on=!!routeSel&&!playing&&T===0;$("tip").hidden=!on;$("play").classList.toggle("hint",on);}
+function play(){if(!routeSel)return;if(T>=routeSel.total){T=0;hint=0;$("arrived").hidden=true;update();}
+  playing=true;last=0;followEl.checked=true;zoomToPin();$("playIcon").innerHTML=ICON_PAUSE;$("play").setAttribute("aria-label","一時停止");setHint();raf=requestAnimationFrame(tick);}
+function pause(){playing=false;cancelAnimationFrame(raf);$("playIcon").innerHTML=ICON_PLAY;$("play").setAttribute("aria-label","出発");pbody.removeAttribute("transform");setHint();}
+$("play").onclick=()=>playing?pause():play();
+$("reset").onclick=()=>{T=0;hint=0;pause();$("arrived").hidden=true;followEl.checked=false;update();if(routeSel)animateView(routeBox(routeSel),900);};
+document.addEventListener("keydown",e=>{if(e.code==="Space"&&!/INPUT|BUTTON|SELECT/.test(document.activeElement.tagName)){e.preventDefault();playing?pause():play();}});
+
+// ---------- フォーム ----------
+let viaSeq=0;
+function addVia(val=""){
+  const box=$("vias"); if(box.children.length>=3) return null;
+  const id="via"+(++viaSeq), d=document.createElement("div"); d.className="field";
+  d.innerHTML=`<span class="dot via"></span><label for="${id}">経由</label><input id="${id}" list="stlist" placeholder="駅名を入力" value="${esc(val)}"><button type="button" class="rm" aria-label="この経由駅を削除" title="削除">×</button>`;
+  d.querySelector(".rm").onclick=()=>{const had=d.querySelector("input").value.trim();d.remove();updAdd();if(had)search();};
+  d.querySelector("input").addEventListener("change",e=>{if(GKEY.has(e.target.value.trim()))search();});
+  box.appendChild(d); updAdd(); return d.querySelector("input");
+}
+function updAdd(){$("addVia").hidden=$("vias").children.length>=3;}
+const viaVals=()=>[...$("vias").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+$("addVia").onclick=()=>{const i=addVia();if(i)i.focus();};
+$("q").onsubmit=e=>{e.preventDefault();search();};
+$("swap").onclick=()=>{const a=$("from").value;$("from").value=$("to").value;$("to").value=a;
+  const ins=[...$("vias").querySelectorAll("input")],vals=ins.map(i=>i.value).reverse();ins.forEach((i,k)=>i.value=vals[k]);search();};
+$("dep").onchange=()=>{if(routeSel){renderList();update();markLegs(true);}};
+["from","to"].forEach(id=>$(id).addEventListener("change",()=>{if(GKEY.has($(id).value.trim()))search();}));
+$("sortTime").onclick=()=>{sortMode="time";setTimeout(()=>markLegs(true));$("sortTime").setAttribute("aria-pressed","true");$("sortXfer").setAttribute("aria-pressed","false");renderList();};
+$("sortXfer").onclick=()=>{sortMode="xfer";setTimeout(()=>markLegs(true));$("sortXfer").setAttribute("aria-pressed","true");$("sortTime").setAttribute("aria-pressed","false");renderList();};
+
+// ---------- 起動 ----------
+requestAnimationFrame(()=>{vb=fitBox(JAPAN,0.02);applyView();});
+fetch("rail.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(init).catch(()=>{
+  $("loading").innerHTML="路線データを読み込めませんでした。ページを再読み込みしてください。";
+});
+})();
+
+</script>
+</body>
+</html>
