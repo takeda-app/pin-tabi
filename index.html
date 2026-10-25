@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-JTV26922DH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-JTV26922DH');
+</script>
 <title>ピン旅</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Chivo+Mono:wght@400;600&display=swap">
@@ -317,6 +325,8 @@ const el=(tag,attrs={},parent)=>{const e=document.createElementNS(NS,tag);for(co
 const dur=m=>{m=Math.round(m);const h=Math.floor(m/60),mm=m%60;return h?`${h}時間${mm?mm+"分":""}`:`${mm}分`;};
 const clock=m=>{m=Math.round(m);const d=Math.floor(m/1440);m=((m%1440)+1440)%1440;return (d>0?"翌":"")+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// アクセス解析のイベント送信（gtag が読み込めないときは何もしない）
+const ga=(name,params)=>{try{if(typeof window.gtag==="function")window.gtag("event",name,params);}catch(e){}};
 const reduceMotion=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- 投影（1単位 ≒ 緯度0.01度 ≒ 1.1km） ----------
@@ -561,6 +571,7 @@ function search(){
   routes=vias.length?viaCandidates(ids):candidates(ids[0],ids[ids.length-1]);
   if(!routes.length) return fail("鉄道だけでつながる経路が見つかりませんでした（離島や海を越える区間など）。");
   routes.forEach(r=>{r.vias=ids.slice(1,-1);r.viaNames=vias.map(v=>GR[GKEY.get(v)].name);});
+  ga("search_route",{from_station:GR[ids[0]].name,to_station:GR[ids[ids.length-1]].name,via_count:vias.length,result_count:routes.length});
   selectRoute(routes[0]);
 }
 function depMin(){const [h,m]=($("dep").value||"09:00").split(":").map(Number);return h*60+m;}
@@ -767,13 +778,15 @@ function tick(ts){
   const moving=T<routeSel.total;
   pbody.setAttribute("transform",moving&&!reduceMotion()?`translate(0 ${(-Math.abs(Math.sin(ts/160))*2.4).toFixed(2)})`:"");
   update();
-  if(!moving){pause();const L=routeSel.legs[routeSel.legs.length-1];$("arrived").textContent=`${GR[ST[L.sts[L.sts.length-1]].g].name}に到着しました`;$("arrived").hidden=false;
+  if(!moving){pause();ga("arrive",rideInfo());const L=routeSel.legs[routeSel.legs.length-1];$("arrived").textContent=`${GR[ST[L.sts[L.sts.length-1]].g].name}に到着しました`;$("arrived").hidden=false;
     const r=routeSel;setTimeout(()=>{if(routeSel===r&&!playing){followEl.checked=false;animateView(routeBox(r),1500);}},900);return;}
   raf=requestAnimationFrame(tick);
 }
 const ICON_PLAY='<path d="M4 2.5v11l9-5.5z" fill="currentColor"/>', ICON_PAUSE='<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/>';
 function setHint(){const on=!!routeSel&&!playing&&T===0;$("tip").hidden=!on;$("play").classList.toggle("hint",on);}
+const rideInfo=()=>{const r=routeSel,L=r.legs[r.legs.length-1];return {from_station:GR[ST[r.legs[0].sts[0]].g].name,to_station:GR[ST[L.sts[L.sts.length-1]].g].name,minutes:Math.round(r.total),transfers:r.xf};};
 function play(){if(!routeSel)return;if(T>=routeSel.total){T=0;hint=0;$("arrived").hidden=true;update();}
+  if(T===0) ga("start_ride",rideInfo());
   playing=true;last=0;followEl.checked=true;zoomToPin();$("playIcon").innerHTML=ICON_PAUSE;$("play").setAttribute("aria-label","一時停止");setHint();raf=requestAnimationFrame(tick);}
 function pause(){playing=false;cancelAnimationFrame(raf);$("playIcon").innerHTML=ICON_PLAY;$("play").setAttribute("aria-label","出発");pbody.removeAttribute("transform");setHint();}
 $("play").onclick=()=>playing?pause():play();
